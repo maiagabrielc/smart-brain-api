@@ -1,9 +1,12 @@
 const express = require('express');
+const cors = require('cors');
 
 const PORT = process.env.PORT || 3000;
 const app = express();
 
+app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(cors());
 
 const database = {
   users: [
@@ -31,6 +34,18 @@ app.get('/', (req, res) => {
 
 app.post('/signing', (req, res) => {
   res.json('signing');
+});
+
+app.post('/register', (req, res) => {
+  res.json('register');
+});
+
+app.get('/profile/:id', (req, res) => {
+  const { id } = req.params;
+});
+
+app.put('/image', (req, res) => {
+  res.json('image');
 });
 
 app.listen(PORT, () => {
