@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const knex = require('knex');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 const db = knex({
@@ -22,7 +23,8 @@ app.use(express.json());
 app.use(cors());
 
 app.get('/', (req, res) => {
-  db.select('*')
+  return db
+    .select('*')
     .from('users')
     .then((response) => {
       res.status(200).json(response);
@@ -30,29 +32,63 @@ app.get('/', (req, res) => {
 });
 
 app.post('/signing', (req, res) => {
-  res.json('signing');
+  const { email, password } = req.body;
+  db.select('email', 'hash')
+    .from('login')
+    .where('email', '=', email)
+    .then((data) => {
+      const isValid = bcrypt.compareSync(password, data[0].hash);
+      if (isValid) {
+        db.select('*')
+          .from('users')
+          .where('email', '=', email)
+          .then((user) => {
+            res.json(user[0]);
+          })
+          .catch((err) => {
+            res.status(400).json('unable to find user');
+          });
+      } else {
+        res.status(400).json('wrong credentials');
+      }
+    })
+    .catch((err) => res.status(400).json('wrong credentials'));
 });
 
 app.post('/register', (req, res) => {
   const { email, name, password } = req.body;
-  db('users')
-    .returning('*')
-    .insert({
-      email,
-      name,
-      joined: new Date(),
-    })
-    .then((user) => {
-      res.json(user[0]);
-    })
-    .catch((err) => {
-      res.status(400).json('not able to register');
-    });
+  const hash = bcrypt.hashSync(password, 10);
+  db.transaction((trx) => {
+    trx
+      .insert({
+        hash,
+        email,
+      })
+      .into('login')
+      .returning('email')
+      .then((loginEmail) => {
+        return trx('users')
+          .returning('*')
+          .insert({
+            email: loginEmail[0].email,
+            name,
+            joined: new Date(),
+          })
+          .then((user) => {
+            res.json(user[0]);
+          });
+      })
+      .then(trx.commit)
+      .catch(trx.rollback);
+  }).catch((err) => {
+    res.status(400).json('not able to register');
+  });
 });
 
 app.get('/profile/:id', (req, res) => {
   const { id } = req.params;
-  db.select('*')
+  return db
+    .select('*')
     .from('users')
     .where({ id })
     .then((user) => {
@@ -63,7 +99,8 @@ app.get('/profile/:id', (req, res) => {
 
 app.put('/image', (req, res) => {
   const { id } = req.body;
-  db.from('users')
+  return db
+    .from('users')
     .where({ id })
     .increment('entries', 1)
     .returning('entries')
